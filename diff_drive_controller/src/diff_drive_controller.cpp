@@ -159,6 +159,13 @@ controller_interface::return_type DiffDriveController::update_and_write_commands
 {
   auto logger = get_node()->get_logger();
 
+  if (
+    registered_left_wheel_handles_.size() < static_cast<size_t>(wheels_per_side_) ||
+    registered_right_wheel_handles_.size() < static_cast<size_t>(wheels_per_side_))
+  {
+    return controller_interface::return_type::OK;
+  }
+
   if (param_listener_->try_update_params(params_))
   {
     cmd_vel_timeout_ = rclcpp::Duration::from_seconds(params_.cmd_vel_timeout);
@@ -549,6 +556,9 @@ controller_interface::CallbackReturn DiffDriveController::on_configure(
 controller_interface::CallbackReturn DiffDriveController::on_activate(
   const rclcpp_lifecycle::State &)
 {
+  registered_left_wheel_handles_.clear();
+  registered_right_wheel_handles_.clear();
+
   const auto left_result =
     configure_side("left", params_.left_wheel_names, registered_left_wheel_handles_);
   const auto right_result =
@@ -558,6 +568,8 @@ controller_interface::CallbackReturn DiffDriveController::on_activate(
     left_result == controller_interface::CallbackReturn::ERROR ||
     right_result == controller_interface::CallbackReturn::ERROR)
   {
+    registered_left_wheel_handles_.clear();
+    registered_right_wheel_handles_.clear();
     return controller_interface::CallbackReturn::ERROR;
   }
 
@@ -566,6 +578,8 @@ controller_interface::CallbackReturn DiffDriveController::on_activate(
     RCLCPP_ERROR(
       get_node()->get_logger(),
       "Either left wheel interfaces, right wheel interfaces are non existent");
+    registered_left_wheel_handles_.clear();
+    registered_right_wheel_handles_.clear();
     return controller_interface::CallbackReturn::ERROR;
   }
 
@@ -581,8 +595,6 @@ controller_interface::CallbackReturn DiffDriveController::on_deactivate(
   subscriber_is_active_ = false;
   halt();
   reset_buffers();
-  registered_left_wheel_handles_.clear();
-  registered_right_wheel_handles_.clear();
   return controller_interface::CallbackReturn::SUCCESS;
 }
 
@@ -702,6 +714,7 @@ controller_interface::CallbackReturn DiffDriveController::configure_side(
   }
 
   // register handles
+  registered_handles.clear();
   registered_handles.reserve(wheel_names.size());
   for (const auto & wheel_name : wheel_names)
   {
